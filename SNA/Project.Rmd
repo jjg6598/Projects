@@ -1,0 +1,192 @@
+---
+title: "Project"
+author: "Julian Gullett"
+date: "5/26/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(sna)
+library(igraph)
+
+edgelist <- scan('C:/Users/Julian/Documents/Dartmouth/Terms/Spring Term/QBS 122/Project/email-Eu-core.txt/email-Eu-core.txt')
+edgelist <- matrix(edgelist, ncol = 2, byrow = TRUE)
+
+nodes <- unique(c(edgelist[,1],edgelist[,2]))
+gnet <- graph_from_data_frame(d=edgelist, vertices=nodes, directed=TRUE)
+
+adjmat <- matrix(0, nrow=length(nodes), ncol=length(nodes))
+
+for (row in 1:nrow(edgelist)) {
+  
+  i = edgelist[row,1]
+  j = edgelist[row,2]
+  
+  adjmat[i,j] <- 1
+  
+}
+
+sum(adjmat)
+
+plot(gnet,mode="fruchtermanreingold",displaylabels=T)
+
+```
+
+```{r}
+
+nodedata <- scan('C:/Users/Julian/Documents/Dartmouth/Terms/Spring Term/QBS 122/Project/email-Eu-core-department-labels.txt/email-Eu-core-department-labels.txt')
+
+nodedata <- matrix(nodedata,nrow=length(nodes),byrow=T)
+
+colnames(nodedata) <- c('Node', 'DepartmentID')
+
+nodedata <- data.frame(nodedata)
+
+detach("package:igraph", unload = TRUE)
+
+```
+
+
+```{r}
+
+nodecov <- list(department=nodedata[,2])
+
+pnet <- network(adjmat,directed=TRUE,matrixtype="adjacency",
+ vertex.attr=nodecov,
+ vertex.attrnames=c("DepartmentID"))
+plot(pnet,mode="fruchtermanreingold",displaylabels=T)
+
+```
+
+This is not a very pleasant plot of the network.  
+
+```{r}
+
+
+
+```
+
+
+```{r}
+
+depsize <- data.frame(table(nodedata$DepartmentID))
+colnames(depsize) <- c("DepartmentID", 'Members')
+
+barplot(depsize$Members, main="Members by Department")
+
+nodedata$DepSize <- 0
+
+for (row in 1:nrow(nodedata)) {
+  
+  nodedata[row, "DepSize"] <- depsize[nodedata[row,"DepartmentID"]+1, "Members"]
+  
+}
+
+```
+I thought this plot would be helpful to visualize the sizes of each department.  Each department has their own bar, and we can see a few outliers.  A couple department have >80 members and ~15 have <10 members.  
+
+
+```{r}
+
+ideg <- degree(adjmat, cmode='indegree')
+odeg <- degree(adjmat, cmode='outdegree')
+
+nodedata$IDeg <- ideg 
+nodedata$ODeg <- odeg 
+
+summary(ideg)
+summary(odeg)
+
+hist(ideg, breaks=50, xlim=c(0,300), ylim=c(0,350), main='In-Degree')
+hist(odeg, breaks=50, xlim=c(0,300), ylim=c(0,350), main='Out-Degree')
+
+length(which(ideg==0))
+length(which(odeg==0))
+
+```
+The degree distributions of this network are shown above.  There are 41 nodes with an in-degree of 0, and 182 nodes with an out-degree of 0.  
+
+```{r error=TRUE}
+
+nodedata$WithinDepartmentIDeg <- 0 
+nodedata$WithinDepartmentODeg <- 0 
+
+for (i in unique(nodedata$DepartmentID)) {
+  
+  idx <- which(nodedata$DepartmentID==i)
+  subnet <- adjmat[idx, idx]
+  
+  nodedata[idx, 'WithinDepartmentIDeg'] <- degree(subnet, cmode='indegree')
+  nodedata[idx, 'WithinDepartmentODeg'] <- degree(subnet, cmode='outdegree')
+  
+}
+
+```
+
+
+```{r}
+
+nodedata$IDegRatio <- nodedata$WithinDepartmentIDeg/nodedata$IDeg
+nodedata$ODegRatio <- nodedata$WithinDepartmentODeg/nodedata$ODeg
+
+nodedata[is.nan(nodedata$IDegRatio), "IDegRatio"] <- 0
+nodedata[is.nan(nodedata$ODegRatio), "ODegRatio"] <- 0
+
+```
+
+
+```{r}
+
+length(which(nodedata$IDegRatio==0))
+length(which(nodedata$ODegRatio==0))
+
+hist(nodedata$IDegRatio, breaks=100, main='In-Degree Ratios')
+hist(nodedata$ODegRatio, breaks=100, main='Out-Degree Ratios')
+
+```
+
+The last few chunks have been focused on degree statistics within departments.  Overall, these histograms show that most nodes in this network have their edges with other nodes that are not within their department.  482 nodes have a within-department in-degree of 0, and 524 nodes have a within-department out-degree of 0.  
+
+
+```{r}
+
+dyads <- dyad.census(adjmat)
+print(dyads)
+
+#triads <- triad.census(adjmat,g="digraph")
+#print(triads)
+
+density <- (dyads[1]*2 + dyads[2]) / sum(dyads)
+print(density)
+
+```
+
+
+```{r}
+
+library(statnet)
+library(coda)
+
+```
+
+
+```{r}
+
+model5 <- ergmMPLE(pnet~edges + mutual + ttriple,output="fit")
+summary(model5)
+
+model5.gof <- gof(model5~idegree,control=control.gof.formula(nsim=100),verbose=F)
+plot(model5.gof)
+
+```
+
+I do not fully understand these ERGMs.  I tried to slot the email dataset into the example code given during lectures.  
+
+
+
+
